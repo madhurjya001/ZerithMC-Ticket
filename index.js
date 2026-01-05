@@ -21,6 +21,17 @@ dotenv.config();
 /* ================= CONFIG ================= */
 const STAFF_ROLE_ID = "1411726484954939572";
 const COUNTER_FILE = "./ticketCounter.json";
+const CONFIG_FILE = "./ticketConfig.json";
+
+/* ================= LOAD CONFIG ================= */
+let config = {
+  categoryId: null,
+  logChannelId: null
+};
+
+if (fs.existsSync(CONFIG_FILE)) {
+  config = JSON.parse(fs.readFileSync(CONFIG_FILE));
+}
 
 /* ================= COUNTER ================= */
 let ticketCounter = 1;
@@ -28,20 +39,15 @@ if (fs.existsSync(COUNTER_FILE)) {
   ticketCounter = JSON.parse(fs.readFileSync(COUNTER_FILE)).counter || 1;
 }
 function saveCounter() {
-  fs.writeFileSync(
-    COUNTER_FILE,
-    JSON.stringify({ counter: ticketCounter }, null, 2)
-  );
+  fs.writeFileSync(COUNTER_FILE, JSON.stringify({ counter: ticketCounter }, null, 2));
 }
 
 /* ================= DATA ================= */
-let CATEGORY_ID;
-let LOG_CHANNEL_ID;
 const ticketData = new Map();
 
 /* ================= WEB ================= */
 const app = express();
-app.get("/", (_, res) => res.send("Ticket Bot Online"));
+app.get("/", (_, res) => res.send("ZerithMC Ticket Bot Online"));
 app.listen(3000);
 
 /* ================= CLIENT ================= */
@@ -57,7 +63,7 @@ const client = new Client({
 const commands = [
   new SlashCommandBuilder()
     .setName("setup")
-    .setDescription("Setup ticket system")
+    .setDescription("Setup ticket category & log channel")
     .addChannelOption(o =>
       o.setName("category").setDescription("Ticket category").setRequired(true)
     )
@@ -67,28 +73,21 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("panel")
-    .setDescription("Send ticket panel")
+    .setDescription("Send the ticket panel")
 ];
 
-/* ================= READY + REGISTER CMDS ================= */
+/* ================= READY ================= */
 client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-  console.log("🔄 Registering slash commands...");
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
-  try {
-    await rest.put(
-      Routes.applicationGuildCommands(
-        process.env.CLIENT_ID,
-        process.env.GUILD_ID
-      ),
-      { body: commands }
-    );
-    console.log("✅ Slash commands registered successfully!");
-  } catch (err) {
-    console.error("❌ Slash command registration failed:", err);
-  }
+  await rest.put(
+    Routes.applicationCommands(client.user.id),
+    { body: commands }
+  );
+
+  console.log("✅ Global slash commands registered");
 });
 
 /* ================= INTERACTIONS ================= */
@@ -98,26 +97,56 @@ client.on("interactionCreate", async interaction => {
   if (interaction.isChatInputCommand()) {
 
     if (interaction.commandName === "setup") {
-      CATEGORY_ID = interaction.options.getChannel("category").id;
-      LOG_CHANNEL_ID = interaction.options.getChannel("log").id;
-      return interaction.reply({ content: "✅ Ticket system setup completed.", ephemeral: true });
+      config.categoryId = interaction.options.getChannel("category").id;
+      config.logChannelId = interaction.options.getChannel("log").id;
+
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+
+      return interaction.reply({
+        content: "✅ Ticket system setup saved successfully.",
+        ephemeral: true
+      });
     }
 
     if (interaction.commandName === "panel") {
+
       const embed = new EmbedBuilder()
-        .setTitle("🎫 Support Tickets")
-        .setDescription("Choose the correct category to open a ticket.")
-        .setColor("#ff0000");
+        .setTitle("🎫 ZerithMC Support Tickets")
+        .setDescription(
+`**📜 Ticket Rules**
+
+• Please follow these before opening a ticket:
+
+**1.** Open tickets only for genuine issues  
+*(support, reports, appeals, purchases & partnerships)*
+
+**2.** Do not spam or troll with unnecessary tickets.  
+*This can lead to action.*
+
+**3.** Be patient — Staff will reply as soon as possible.
+
+**4.** Provide details clearly if possible.  
+*(Proof / Screenshots if needed)*
+
+**5.** Respect staff decisions and keep communication polite.
+
+━━━━━━━━━━━━━━━━━━━
+
+Here, you can directly contact our staff team if you'd like to report suspicious activity or have any general inquiries.
+
+**We offer five different ticket options — simply select the type of ticket you'd like to open.**`
+        )
+        .setColor("#0b0b0b");
 
       const row1 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("general").setLabel("General Support").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("partner").setLabel("Partnership").setStyle(ButtonStyle.Success)
+        new ButtonBuilder().setCustomId("general").setLabel("General Support").setEmoji("💬").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("partner").setLabel("Partnership Requests").setEmoji("🤝").setStyle(ButtonStyle.Success)
       );
 
       const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("report").setLabel("Report User").setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId("store").setLabel("Store").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("appeal").setLabel("Appeal").setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId("report").setLabel("Report a User").setEmoji("🚨").setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId("store").setLabel("Store Purchases").setEmoji("🛒").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("appeal").setLabel("Appeal for Unban").setEmoji("📩").setStyle(ButtonStyle.Secondary)
       );
 
       return interaction.reply({ embeds: [embed], components: [row1, row2] });
@@ -128,48 +157,77 @@ client.on("interactionCreate", async interaction => {
   if (!interaction.isButton()) return;
   const guild = interaction.guild;
 
-  /* ---------- CLAIM ---------- */
-  if (interaction.customId === "claim") {
-    if (!interaction.member.roles.cache.has(STAFF_ROLE_ID)) {
-      return interaction.reply({ content: "❌ Staff only.", ephemeral: true });
+  /* ---------- CREATE TICKET ---------- */
+  if (["general","partner","report","store","appeal"].includes(interaction.customId)) {
+
+    if (!config.categoryId || !config.logChannelId) {
+      return interaction.reply({ content: "❌ Ticket system not setup yet.", ephemeral: true });
     }
 
-    const data = ticketData.get(interaction.channel.id);
-    if (data.claimedBy) {
-      return interaction.reply({ content: "❌ Ticket already claimed.", ephemeral: true });
-    }
+    const channel = await guild.channels.create({
+      name: `ticket-${ticketCounter}`,
+      type: ChannelType.GuildText,
+      parent: config.categoryId,
+      permissionOverwrites: [
+        { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+        { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+        { id: STAFF_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+      ]
+    });
 
-    data.claimedBy = interaction.user;
-    await interaction.channel.setName(`claimed-${interaction.channel.name}`);
+    ticketData.set(channel.id, {
+      opener: interaction.user,
+      type: interaction.customId,
+      claimedBy: null
+    });
 
-    const claimLog = new EmbedBuilder()
-      .setTitle("🛠️ Ticket Claimed")
-      .setColor("#f1c40f")
+    ticketCounter++;
+    saveCounter();
+
+    const logEmbed = new EmbedBuilder()
+      .setTitle("🎫 Ticket Opened")
       .addFields(
-        { name: "👤 Staff", value: `<@${interaction.user.id}>`, inline: true },
-        { name: "📂 Category", value: data.type, inline: true },
-        { name: "📌 Channel", value: `${interaction.channel}`, inline: true }
+        { name: "User", value: `<@${interaction.user.id}>`, inline: true },
+        { name: "Category", value: interaction.customId, inline: true },
+        { name: "Channel", value: `${channel}`, inline: true }
       )
+      .setColor("#2b2d31")
       .setTimestamp();
 
-    guild.channels.cache.get(LOG_CHANNEL_ID)?.send({ embeds: [claimLog] });
+    guild.channels.cache.get(config.logChannelId)?.send({ embeds: [logEmbed] });
+
+    const ticketEmbed = new EmbedBuilder()
+      .setTitle("🎫 Ticket")
+      .setDescription("Please describe your issue clearly.")
+      .setColor("#00ffd5");
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("close").setLabel("Close").setStyle(ButtonStyle.Danger)
+    );
+
+    await channel.send({ content: `<@${interaction.user.id}>`, embeds: [ticketEmbed], components: [row] });
+    return interaction.reply({ content: `✅ Ticket created: ${channel}`, ephemeral: true });
+  }
+
+  /* ---------- CLAIM ---------- */
+  if (interaction.customId === "claim") {
+    if (!interaction.member.roles.cache.has(STAFF_ROLE_ID))
+      return interaction.reply({ content: "❌ Staff only.", ephemeral: true });
+
+    const data = ticketData.get(interaction.channel.id);
+    if (data.claimedBy)
+      return interaction.reply({ content: "❌ Already claimed.", ephemeral: true });
+
+    data.claimedBy = interaction.user;
     return interaction.reply(`✅ Ticket claimed by ${interaction.user}`);
   }
 
-  /* ---------- CLOSE (ONLY CLAIMER) ---------- */
+  /* ---------- CLOSE ---------- */
   if (interaction.customId === "close") {
     const data = ticketData.get(interaction.channel.id);
-
-    if (!data.claimedBy) {
-      return interaction.reply({ content: "❌ Ticket not claimed yet.", ephemeral: true });
-    }
-
-    if (interaction.user.id !== data.claimedBy.id) {
-      return interaction.reply({
-        content: "❌ Only the staff member who claimed this ticket can close it.",
-        ephemeral: true
-      });
-    }
+    if (!data.claimedBy || interaction.user.id !== data.claimedBy.id)
+      return interaction.reply({ content: "❌ Only claimer can close.", ephemeral: true });
 
     const transcript = await createTranscript(interaction.channel, {
       fileName: `${interaction.channel.name}.html`
@@ -177,72 +235,23 @@ client.on("interactionCreate", async interaction => {
 
     const closeEmbed = new EmbedBuilder()
       .setTitle("🔒 Ticket Closed")
-      .setColor("#e74c3c")
       .addFields(
-        { name: "👤 Opened By", value: `<@${data.opener.id}>`, inline: true },
-        { name: "🛠️ Claimed By", value: `<@${data.claimedBy.id}>`, inline: true },
-        { name: "🔒 Closed By", value: `<@${interaction.user.id}>`, inline: true },
-        { name: "📂 Category", value: data.type, inline: true },
-        { name: "🆔 Ticket", value: interaction.channel.name, inline: true }
+        { name: "Opened By", value: `<@${data.opener.id}>`, inline: true },
+        { name: "Claimed By", value: `<@${data.claimedBy.id}>`, inline: true }
       )
+      .setColor("#e74c3c")
       .setTimestamp();
 
     try {
       await data.opener.send({ embeds: [closeEmbed], files: [transcript] });
     } catch {}
 
-    guild.channels.cache.get(LOG_CHANNEL_ID)
+    guild.channels.cache.get(config.logChannelId)
       ?.send({ embeds: [closeEmbed], files: [transcript] });
 
     ticketData.delete(interaction.channel.id);
-    return interaction.channel.delete();
+    interaction.channel.delete();
   }
-
-  /* ---------- CREATE TICKET ---------- */
-  const channel = await guild.channels.create({
-    name: `ticket-${ticketCounter}`,
-    parent: CATEGORY_ID,
-    type: ChannelType.GuildText,
-    permissionOverwrites: [
-      { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-      { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-      { id: STAFF_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
-    ]
-  });
-
-  ticketData.set(channel.id, {
-    opener: interaction.user,
-    type: interaction.customId,
-    claimedBy: null
-  });
-
-  ticketCounter++;
-  saveCounter();
-
-  const openLog = new EmbedBuilder()
-    .setTitle("🎫 Ticket Opened")
-    .setColor("#2b2d31")
-    .addFields(
-      { name: "👤 User", value: `<@${interaction.user.id}>`, inline: true },
-      { name: "📂 Category", value: interaction.customId, inline: true },
-      { name: "📌 Channel", value: `${channel}`, inline: true }
-    )
-    .setTimestamp();
-
-  guild.channels.cache.get(LOG_CHANNEL_ID)?.send({ embeds: [openLog] });
-
-  const ticketEmbed = new EmbedBuilder()
-    .setTitle("🎫 Ticket")
-    .setDescription("Please describe your issue clearly.")
-    .setColor("#00ffd5");
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("close").setLabel("Close").setStyle(ButtonStyle.Danger)
-  );
-
-  await channel.send({ content: `<@${interaction.user.id}>`, embeds: [ticketEmbed], components: [row] });
-  interaction.reply({ content: `✅ Ticket created: ${channel}`, ephemeral: true });
 });
 
 /* ================= LOGIN ================= */
