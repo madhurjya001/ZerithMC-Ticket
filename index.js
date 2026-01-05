@@ -248,7 +248,18 @@ client.on("interactionCreate", async interaction => {
     saveTickets();
 
     await interaction.channel.setName(`claimed-${interaction.channel.name}`);
-    await interaction.message.edit({ components: [] });
+    await interaction.message.edit({
+  components: [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("close")
+        .setLabel("Close")
+        .setEmoji("🔒")
+        .setStyle(ButtonStyle.Danger)
+    )
+  ]
+});
+
 
     await interaction.channel.send({
       embeds: [
@@ -411,3 +422,4 @@ process.on("uncaughtException", console.error);
 
 /* ================= LOGIN ================= */
 client.login(process.env.TOKEN);
+
