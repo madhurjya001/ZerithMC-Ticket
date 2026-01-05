@@ -31,7 +31,7 @@ const CATEGORIES = {
   appeal: "Appeal"
 };
 
-/* ================= LOAD DATA ================= */
+/* ================= LOAD / SAVE ================= */
 let config = fs.existsSync(CONFIG_FILE)
   ? JSON.parse(fs.readFileSync(CONFIG_FILE))
   : { categoryId: null, logChannelId: null };
@@ -44,17 +44,12 @@ let tickets = fs.existsSync(TICKETS_FILE)
   ? JSON.parse(fs.readFileSync(TICKETS_FILE))
   : {};
 
-const saveConfig = () =>
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
-const saveCounter = () =>
-  fs.writeFileSync(COUNTER_FILE, JSON.stringify({ counter }, null, 2));
-const saveTickets = () =>
-  fs.writeFileSync(TICKETS_FILE, JSON.stringify(tickets, null, 2));
+const saveConfig = () => fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+const saveCounter = () => fs.writeFileSync(COUNTER_FILE, JSON.stringify({ counter }, null, 2));
+const saveTickets = () => fs.writeFileSync(TICKETS_FILE, JSON.stringify(tickets, null, 2));
 
 /* ================= HELPERS ================= */
-const isAdmin = (m) =>
-  m.permissions.has(PermissionsBitField.Flags.Administrator);
-
+const isAdmin = (m) => m.permissions.has(PermissionsBitField.Flags.Administrator);
 const isStaffOrAdmin = (i) =>
   i.member.roles.cache.has(STAFF_ROLE_ID) || isAdmin(i.member);
 
@@ -63,7 +58,27 @@ async function safeReply(i, data) {
   return i.reply(data).catch(() => {});
 }
 
-/* ================= TRANSCRIPT (TXT) ================= */
+function sendLog(guild, embed, file = null) {
+  const ch = guild.channels.cache.get(config.logChannelId);
+  if (!ch) return;
+  return file
+    ? ch.send({ embeds: [embed], files: [file] })
+    : ch.send({ embeds: [embed] });
+}
+
+async function sendTranscriptToUser(userId, file) {
+  try {
+    const user = await client.users.fetch(userId);
+    await user.send({
+      content: "📄 Your ticket has been closed. Here is the transcript:",
+      files: [file]
+    });
+  } catch {
+    // DMs closed – ignore
+  }
+}
+
+/* ================= TRANSCRIPT ================= */
 async function createTranscript(channel, data, closedBy) {
   const msgs = await channel.messages.fetch({ limit: 100 });
   const ordered = [...msgs.values()].reverse();
@@ -79,7 +94,7 @@ Claimed By : ${data.claimedBy ? `<@${data.claimedBy}>` : "Not Claimed"}
 Closed By  : ${closedBy}
 Time       : ${new Date().toLocaleString()}
 
------------------------------------
+----------------------------------
 
 `;
 
@@ -110,10 +125,8 @@ const commands = [
     .setName("setup")
     .setDescription("Setup ticket system")
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
-    .addChannelOption(o =>
-      o.setName("category").setDescription("Ticket category").setRequired(true))
-    .addChannelOption(o =>
-      o.setName("log").setDescription("Log channel").setRequired(true)),
+    .addChannelOption(o => o.setName("category").setDescription("Ticket category").setRequired(true))
+    .addChannelOption(o => o.setName("log").setDescription("Log channel").setRequired(true)),
 
   new SlashCommandBuilder()
     .setName("panel")
@@ -124,10 +137,9 @@ const commands = [
 /* ================= READY ================= */
 client.once("ready", async () => {
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
-  await rest.put(
-    Routes.applicationCommands(client.user.id),
-    { body: commands.map(c => c.toJSON()) }
-  );
+  await rest.put(Routes.applicationCommands(client.user.id), {
+    body: commands.map(c => c.toJSON())
+  });
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
@@ -136,7 +148,6 @@ client.on("interactionCreate", async interaction => {
 
   /* ---------- SLASH ---------- */
   if (interaction.isChatInputCommand()) {
-
     if (!isAdmin(interaction.member))
       return safeReply(interaction, { content: "❌ Admin only.", ephemeral: true });
 
@@ -148,22 +159,13 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (interaction.commandName === "panel") {
-      const embed = new EmbedBuilder()
-        .setTitle("🎫 ZerithMC Support Tickets")
-        .setColor("#ff0000")
-        .setDescription(
-`📜 **Ticket Rules**
-• Genuine issues only
-• No spam
-• Be patient
-• Provide proof if needed
-• Respect staff
-
-Select a ticket type below.`
-        );
-
       return safeReply(interaction, {
-        embeds: [embed],
+        embeds: [
+          new EmbedBuilder()
+            .setColor("#ff0000")
+            .setTitle("🎫 ZerithMC Support Tickets")
+            .setDescription("Select a ticket category below.")
+        ],
         components: [
           new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId("general").setLabel("General").setEmoji("💬").setStyle(ButtonStyle.Secondary),
@@ -201,12 +203,20 @@ Select a ticket type below.`
     saveTickets();
     counter++; saveCounter();
 
+    sendLog(interaction.guild,
+      new EmbedBuilder()
+        .setColor("#2ecc71")
+        .setTitle("🎫 Ticket Opened")
+        .addFields(
+          { name: "User", value: `<@${interaction.user.id}>`, inline: true },
+          { name: "Category", value: CATEGORIES[interaction.customId], inline: true },
+          { name: "Channel", value: `${ch}`, inline: false }
+        )
+        .setTimestamp()
+    );
+
     await safeReply(interaction, {
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#2ecc71")
-          .setDescription(`✅ Your ticket has been created: ${ch}`)
-      ],
+      embeds: [new EmbedBuilder().setColor("#2ecc71").setDescription(`✅ Ticket created: ${ch}`)],
       ephemeral: true
     });
 
@@ -238,6 +248,7 @@ Select a ticket type below.`
     saveTickets();
 
     await interaction.channel.setName(`claimed-${interaction.channel.name}`);
+    await interaction.message.edit({ components: [] });
 
     await interaction.channel.send({
       embeds: [
@@ -246,6 +257,17 @@ Select a ticket type below.`
           .setDescription(`🛠️ This ticket will be handled by <@${interaction.user.id}>`)
       ]
     });
+
+    sendLog(interaction.guild,
+      new EmbedBuilder()
+        .setColor("#f1c40f")
+        .setTitle("🛠️ Ticket Claimed")
+        .addFields(
+          { name: "Staff", value: `<@${interaction.user.id}>`, inline: true },
+          { name: "Channel", value: `${interaction.channel}`, inline: false }
+        )
+        .setTimestamp()
+    );
 
     return safeReply(interaction, { content: "✅ Ticket claimed.", ephemeral: true });
   }
@@ -259,11 +281,7 @@ Select a ticket type below.`
       return safeReply(interaction, { content: "❌ Only claimer or admin can close.", ephemeral: true });
 
     return safeReply(interaction, {
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#e67e22")
-          .setDescription("⚠️ Are you sure you want to close this ticket?")
-      ],
+      embeds: [new EmbedBuilder().setColor("#e67e22").setDescription("⚠️ Are you sure you want to close this ticket?")],
       components: [
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId("confirm_close").setLabel("Confirm").setStyle(ButtonStyle.Danger),
@@ -276,17 +294,30 @@ Select a ticket type below.`
 
   if (interaction.isButton() && interaction.customId === "confirm_close") {
     const data = tickets[interaction.channel.id];
+    if (!data) return;
+
     data.status = "closed";
     saveTickets();
 
     await interaction.channel.setName(`closed-${interaction.channel.name}`);
 
+    const transcript = await createTranscript(interaction.channel, data, interaction.user.username);
+    await sendTranscriptToUser(data.opener, transcript);
+
+    sendLog(interaction.guild,
+      new EmbedBuilder()
+        .setColor("#e74c3c")
+        .setTitle("🔒 Ticket Closed")
+        .addFields(
+          { name: "Closed By", value: `<@${interaction.user.id}>`, inline: true },
+          { name: "Channel", value: `${interaction.channel}`, inline: false }
+        )
+        .setTimestamp(),
+      transcript
+    );
+
     return interaction.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#e74c3c")
-          .setDescription("🔒 Ticket closed.")
-      ],
+      embeds: [new EmbedBuilder().setColor("#e74c3c").setDescription("🔒 Ticket closed.")],
       components: [
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId("transcript").setLabel("Transcript").setEmoji("🧾").setStyle(ButtonStyle.Secondary),
@@ -307,6 +338,8 @@ Select a ticket type below.`
       return safeReply(interaction, { content: "❌ Staff only.", ephemeral: true });
 
     const data = tickets[interaction.channel.id];
+    if (!data) return;
+
     const file = await createTranscript(interaction.channel, data, interaction.user.username);
     return safeReply(interaction, { files: [file], ephemeral: true });
   }
@@ -317,15 +350,29 @@ Select a ticket type below.`
       return safeReply(interaction, { content: "❌ Staff only.", ephemeral: true });
 
     const data = tickets[interaction.channel.id];
+    if (!data) return;
+
     data.status = "open";
     data.claimedBy = null;
     saveTickets();
 
     await interaction.channel.setName(interaction.channel.name.replace("closed-", "ticket-"));
+
+    sendLog(interaction.guild,
+      new EmbedBuilder()
+        .setColor("#3498db")
+        .setTitle("🔓 Ticket Reopened")
+        .addFields(
+          { name: "By", value: `<@${interaction.user.id}>`, inline: true },
+          { name: "Channel", value: `${interaction.channel}`, inline: false }
+        )
+        .setTimestamp()
+    );
+
     return interaction.channel.send("🔓 Ticket reopened.");
   }
 
-  /* ---------- DELETE (5s TIMER) ---------- */
+  /* ---------- DELETE (5s) ---------- */
   if (interaction.isButton() && interaction.customId === "delete") {
     if (!isStaffOrAdmin(interaction))
       return safeReply(interaction, { content: "❌ Staff only.", ephemeral: true });
@@ -334,11 +381,22 @@ Select a ticket type below.`
 
     setTimeout(async () => {
       const data = tickets[interaction.channel.id];
-      const file = await createTranscript(interaction.channel, data, interaction.user.username);
+      if (!data) return;
 
-      interaction.guild.channels.cache
-        .get(config.logChannelId)
-        ?.send({ files: [file] });
+      const file = await createTranscript(interaction.channel, data, interaction.user.username);
+      await sendTranscriptToUser(data.opener, file);
+
+      sendLog(interaction.guild,
+        new EmbedBuilder()
+          .setColor("#c0392b")
+          .setTitle("🗑️ Ticket Deleted")
+          .addFields(
+            { name: "Deleted By", value: `<@${interaction.user.id}>`, inline: true },
+            { name: "Channel", value: interaction.channel.name, inline: false }
+          )
+          .setTimestamp(),
+        file
+      );
 
       delete tickets[interaction.channel.id];
       saveTickets();
