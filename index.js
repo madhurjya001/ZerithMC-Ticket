@@ -28,7 +28,10 @@ if (fs.existsSync(COUNTER_FILE)) {
   ticketCounter = JSON.parse(fs.readFileSync(COUNTER_FILE)).counter || 1;
 }
 function saveCounter() {
-  fs.writeFileSync(COUNTER_FILE, JSON.stringify({ counter: ticketCounter }, null, 2));
+  fs.writeFileSync(
+    COUNTER_FILE,
+    JSON.stringify({ counter: ticketCounter }, null, 2)
+  );
 }
 
 /* ================= DATA ================= */
@@ -50,7 +53,7 @@ const client = new Client({
   ]
 });
 
-/* ================= COMMANDS ================= */
+/* ================= SLASH COMMANDS ================= */
 const commands = [
   new SlashCommandBuilder()
     .setName("setup")
@@ -67,14 +70,25 @@ const commands = [
     .setDescription("Send ticket panel")
 ];
 
-const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
-await rest.put(
-  Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
-  { body: commands }
-);
-
-client.once("ready", () => {
+/* ================= READY + REGISTER CMDS ================= */
+client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+  console.log("🔄 Registering slash commands...");
+
+  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+
+  try {
+    await rest.put(
+      Routes.applicationGuildCommands(
+        process.env.CLIENT_ID,
+        process.env.GUILD_ID
+      ),
+      { body: commands }
+    );
+    console.log("✅ Slash commands registered successfully!");
+  } catch (err) {
+    console.error("❌ Slash command registration failed:", err);
+  }
 });
 
 /* ================= INTERACTIONS ================= */
@@ -93,7 +107,7 @@ client.on("interactionCreate", async interaction => {
       const embed = new EmbedBuilder()
         .setTitle("🎫 Support Tickets")
         .setDescription("Choose the correct category to open a ticket.")
-        .setColor("#ff0000ff");
+        .setColor("#ff0000");
 
       const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("general").setLabel("General Support").setStyle(ButtonStyle.Secondary),
@@ -147,10 +161,7 @@ client.on("interactionCreate", async interaction => {
     const data = ticketData.get(interaction.channel.id);
 
     if (!data.claimedBy) {
-      return interaction.reply({
-        content: "❌ This ticket has not been claimed yet.",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "❌ Ticket not claimed yet.", ephemeral: true });
     }
 
     if (interaction.user.id !== data.claimedBy.id) {
