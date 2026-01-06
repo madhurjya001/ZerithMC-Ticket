@@ -335,10 +335,12 @@ Select a category below to open a ticket.
     return safeReply(interaction, { files: [file], ephemeral: true });
   }
 
-  /* ---------- REOPEN ---------- */
-  /* ---------- REOPEN ---------- */
+  
+   /* ---------- REOPEN ---------- */
 if (interaction.isButton() && interaction.customId === "reopen") {
   if (!isStaffOrAdmin(interaction)) return;
+
+  await interaction.deferUpdate(); // 
 
   const data = tickets[interaction.channel.id];
   if (!data) return;
@@ -353,38 +355,10 @@ if (interaction.isButton() && interaction.customId === "reopen") {
     name = name.replace("closed-", "ticket-");
   } else if (name.startsWith("claimed-closed-")) {
     name = name.replace("claimed-closed-", "ticket-");
-  } else if (!name.startsWith("ticket-")) {
-    name = `ticket-${name.split("-").pop()}`;
   }
 
   await interaction.channel.setName(name);
-
-  return interaction.channel.send("🔓 Ticket reopened.");
-}
-/* ---------- REOPEN ---------- */
-if (interaction.isButton() && interaction.customId === "reopen") {
-  if (!isStaffOrAdmin(interaction)) return;
-
-  const data = tickets[interaction.channel.id];
-  if (!data) return;
-
-  data.status = "open";
-  data.claimedBy = null;
-  saveTickets();
-
-  let name = interaction.channel.name;
-
-  if (name.startsWith("closed-")) {
-    name = name.replace("closed-", "ticket-");
-  } else if (name.startsWith("claimed-closed-")) {
-    name = name.replace("claimed-closed-", "ticket-");
-  } else if (!name.startsWith("ticket-")) {
-    name = `ticket-${name.split("-").pop()}`;
-  }
-
-  await interaction.channel.setName(name);
-
-  return interaction.channel.send("🔓 Ticket reopened.");
+  await interaction.channel.send("🔓 Ticket reopened.");
 }
 
   /* ---------- DELETE ---------- */
@@ -406,4 +380,5 @@ process.on("uncaughtException", console.error);
 
 /* ================= LOGIN ================= */
 client.login(process.env.TOKEN);
+
 
