@@ -336,18 +336,56 @@ Select a category below to open a ticket.
   }
 
   /* ---------- REOPEN ---------- */
-  if (interaction.isButton() && interaction.customId === "reopen") {
-    if (!isStaffOrAdmin(interaction)) return;
-    const data = tickets[interaction.channel.id];
-    if (!data) return;
+  /* ---------- REOPEN ---------- */
+if (interaction.isButton() && interaction.customId === "reopen") {
+  if (!isStaffOrAdmin(interaction)) return;
 
-    data.status = "open";
-    data.claimedBy = null;
-    saveTickets();
+  const data = tickets[interaction.channel.id];
+  if (!data) return;
 
-    await interaction.channel.setName(interaction.channel.name.replace("closed-", "ticket-"));
-    return interaction.channel.send("🔓 Ticket reopened.");
+  data.status = "open";
+  data.claimedBy = null;
+  saveTickets();
+
+  let name = interaction.channel.name;
+
+  if (name.startsWith("closed-")) {
+    name = name.replace("closed-", "ticket-");
+  } else if (name.startsWith("claimed-closed-")) {
+    name = name.replace("claimed-closed-", "ticket-");
+  } else if (!name.startsWith("ticket-")) {
+    name = `ticket-${name.split("-").pop()}`;
   }
+
+  await interaction.channel.setName(name);
+
+  return interaction.channel.send("🔓 Ticket reopened.");
+}
+/* ---------- REOPEN ---------- */
+if (interaction.isButton() && interaction.customId === "reopen") {
+  if (!isStaffOrAdmin(interaction)) return;
+
+  const data = tickets[interaction.channel.id];
+  if (!data) return;
+
+  data.status = "open";
+  data.claimedBy = null;
+  saveTickets();
+
+  let name = interaction.channel.name;
+
+  if (name.startsWith("closed-")) {
+    name = name.replace("closed-", "ticket-");
+  } else if (name.startsWith("claimed-closed-")) {
+    name = name.replace("claimed-closed-", "ticket-");
+  } else if (!name.startsWith("ticket-")) {
+    name = `ticket-${name.split("-").pop()}`;
+  }
+
+  await interaction.channel.setName(name);
+
+  return interaction.channel.send("🔓 Ticket reopened.");
+}
 
   /* ---------- DELETE ---------- */
   if (interaction.isButton() && interaction.customId === "delete") {
@@ -368,3 +406,4 @@ process.on("uncaughtException", console.error);
 
 /* ================= LOGIN ================= */
 client.login(process.env.TOKEN);
+
