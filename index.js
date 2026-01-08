@@ -340,7 +340,7 @@ Select a category below to open a ticket.
 if (interaction.isButton() && interaction.customId === "reopen") {
   if (!isStaffOrAdmin(interaction)) return;
 
-  await interaction.deferUpdate(); // ✅ prevents "interaction failed"
+  await interaction.deferUpdate(); // prevents "interaction failed"
 
   const data = tickets[interaction.channel.id];
   if (!data) return;
@@ -349,28 +349,33 @@ if (interaction.isButton() && interaction.customId === "reopen") {
   data.claimedBy = null;
   saveTickets();
 
+  // 🔧 FIX CHANNEL NAME PROPERLY
   let name = interaction.channel.name;
 
-  // ✅ handle ALL cases
-  name = name
-    .replace("closed-", "")
-    .replace("claimed-", "");
+  if (name.startsWith("closed-claimed-")) {
+    name = name.replace("closed-claimed-", "ticket-");
+  } else if (name.startsWith("closed-")) {
+    name = name.replace("closed-", "ticket-");
+  }
 
-  await interaction.channel.setName(`ticket-${name.split("ticket-").pop()}`);
+  await interaction.channel.setName(name);
 
+  // 🔓 REOPEN MESSAGE + ONLY CLOSE BUTTON
   await interaction.channel.send({
+    content: `<@${data.opener}> <@&${STAFF_ROLE_ID}>`,
     embeds: [
       new EmbedBuilder()
         .setColor("#2ecc71")
-        .setDescription("🔓 **Ticket has been reopened.")
+        .setTitle("🔓 Ticket Reopened")
+        .setDescription(
+          "This ticket has been reopened.\n\n" +
+          "📩 Please continue the discussion below."
+        )
+        .setFooter({ text: "ZerithMC Tickets" })
+        .setTimestamp()
     ],
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("claim")
-          .setLabel("Claim")
-          .setEmoji("🛠️")
-          .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
           .setCustomId("close")
           .setLabel("Close")
@@ -380,6 +385,7 @@ if (interaction.isButton() && interaction.customId === "reopen") {
     ]
   });
 }
+
 
 
   /* ---------- DELETE ---------- */
@@ -401,6 +407,7 @@ process.on("uncaughtException", console.error);
 
 /* ================= LOGIN ================= */
 client.login(process.env.TOKEN);
+
 
 
 
