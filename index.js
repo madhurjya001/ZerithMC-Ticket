@@ -336,11 +336,9 @@ Select a category below to open a ticket.
   }
 
   
-   /* ---------- REOPEN ---------- */
+/* ---------- REOPEN ---------- */
 if (interaction.isButton() && interaction.customId === "reopen") {
   if (!isStaffOrAdmin(interaction)) return;
-
-  await interaction.deferUpdate(); // 
 
   const data = tickets[interaction.channel.id];
   if (!data) return;
@@ -350,7 +348,6 @@ if (interaction.isButton() && interaction.customId === "reopen") {
   saveTickets();
 
   let name = interaction.channel.name;
-
   if (name.startsWith("closed-")) {
     name = name.replace("closed-", "ticket-");
   } else if (name.startsWith("claimed-closed-")) {
@@ -358,8 +355,19 @@ if (interaction.isButton() && interaction.customId === "reopen") {
   }
 
   await interaction.channel.setName(name);
-  await interaction.channel.send("🔓 Ticket reopened.");
+
+  await safeReply(interaction, {
+    embeds: [
+      new EmbedBuilder()
+        .setColor("#2ecc71")
+        .setTitle("🔓 Ticket Reopened")
+        .setDescription("This ticket has been reopened and is now active again.")
+        .setFooter({ text: "ZerithMC Tickets" })
+        .setTimestamp()
+    ]
+  });
 }
+
 
   /* ---------- DELETE ---------- */
   if (interaction.isButton() && interaction.customId === "delete") {
@@ -380,5 +388,6 @@ process.on("uncaughtException", console.error);
 
 /* ================= LOGIN ================= */
 client.login(process.env.TOKEN);
+
 
 
