@@ -338,46 +338,48 @@ Select a category below to open a ticket.
   
 /* ---------- REOPEN ---------- */
 if (interaction.isButton() && interaction.customId === "reopen") {
-  if (!isStaffOrAdmin(interaction)) {
-    return interaction.reply({
-      content: "❌ Staff only.",
-      ephemeral: true
-    });
-  }
+  if (!isStaffOrAdmin(interaction)) return;
 
-  await interaction.deferUpdate();
+  await interaction.deferUpdate(); // ✅ prevents "interaction failed"
 
   const data = tickets[interaction.channel.id];
-  if (!data) {
-    return interaction.followUp({
-      content: "❌ Ticket data not found.",
-      ephemeral: true
-    });
-  }
+  if (!data) return;
 
   data.status = "open";
   data.claimedBy = null;
   saveTickets();
 
   let name = interaction.channel.name;
-  if (name.startsWith("closed-")) {
-    name = name.replace("closed-", "ticket-");
-  }
 
-  await interaction.channel.setName(name);
+  // ✅ handle ALL cases
+  name = name
+    .replace("closed-", "")
+    .replace("claimed-", "");
 
+  await interaction.channel.setName(`ticket-${name.split("ticket-").pop()}`);
 
   await interaction.channel.send({
     embeds: [
       new EmbedBuilder()
-        .setColor("#3498db")
-        .setTitle("🔓 Ticket Reopened")
-        .setTimestamp()
+        .setColor("#2ecc71")
+        .setDescription("🔓 **Ticket has been reopened.")
+    ],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("claim")
+          .setLabel("Claim")
+          .setEmoji("🛠️")
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId("close")
+          .setLabel("Close")
+          .setEmoji("🔒")
+          .setStyle(ButtonStyle.Danger)
+      )
     ]
   });
 }
-
-
 
 
   /* ---------- DELETE ---------- */
@@ -399,6 +401,7 @@ process.on("uncaughtException", console.error);
 
 /* ================= LOGIN ================= */
 client.login(process.env.TOKEN);
+
 
 
 
