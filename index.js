@@ -372,8 +372,6 @@ if (interaction.isButton() && interaction.customId === "reopen") {
       new EmbedBuilder()
         .setColor("#3498db")
         .setTitle("🔓 Ticket Reopened")
-        .setDescription("This ticket has been successfully reopened.")
-        .setFooter({ text: "ZerithMC Tickets" })
         .setTimestamp()
     ]
   });
@@ -401,6 +399,7 @@ process.on("uncaughtException", console.error);
 
 /* ================= LOGIN ================= */
 client.login(process.env.TOKEN);
+
 
 
 
