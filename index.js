@@ -338,14 +338,21 @@ Select a category below to open a ticket.
   
 /* ---------- REOPEN ---------- */
 if (interaction.isButton() && interaction.customId === "reopen") {
-  if (!isStaffOrAdmin(interaction)) return;
+  if (!isStaffOrAdmin(interaction)) {
+    return interaction.reply({
+      content: "❌ Staff only.",
+      ephemeral: true
+    });
+  }
 
-  
-  await interaction.deferReply({ ephemeral: false });
+  await interaction.deferUpdate();
 
   const data = tickets[interaction.channel.id];
   if (!data) {
-    return interaction.editReply("❌ Ticket data not found.");
+    return interaction.followUp({
+      content: "❌ Ticket data not found.",
+      ephemeral: true
+    });
   }
 
   data.status = "open";
@@ -353,27 +360,25 @@ if (interaction.isButton() && interaction.customId === "reopen") {
   saveTickets();
 
   let name = interaction.channel.name;
-
   if (name.startsWith("closed-")) {
     name = name.replace("closed-", "ticket-");
-  } else if (name.startsWith("claimed-closed-")) {
-    name = name.replace("claimed-closed-", "ticket-");
   }
 
   await interaction.channel.setName(name);
 
-  
-  await interaction.editReply({
+
+  await interaction.channel.send({
     embeds: [
       new EmbedBuilder()
-        .setColor("#2ecc71")
+        .setColor("#3498db")
         .setTitle("🔓 Ticket Reopened")
-        .setDescription("This ticket has been reopened and is now active.")
+        .setDescription("This ticket has been successfully reopened.")
         .setFooter({ text: "ZerithMC Tickets" })
         .setTimestamp()
     ]
   });
 }
+
 
 
 
@@ -396,6 +401,7 @@ process.on("uncaughtException", console.error);
 
 /* ================= LOGIN ================= */
 client.login(process.env.TOKEN);
+
 
 
 
