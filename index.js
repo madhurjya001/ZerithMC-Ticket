@@ -17,7 +17,7 @@ import {
 
 dotenv.config();
 
-/* ================= CONFIG ================= */
+/* CONFIG */
 const STAFF_ROLE_ID = "1411726484954939572";
 const CONFIG_FILE = "./ticketConfig.json";
 const COUNTER_FILE = "./ticketCounter.json";
@@ -39,7 +39,7 @@ const CATEGORY_MESSAGES = {
   appeal: "Please explain why you believe this punishment should be appealed."
 };
 
-/* ================= LOAD / SAVE ================= */
+/* LOAD / SAVE */
 let config = fs.existsSync(CONFIG_FILE)
   ? JSON.parse(fs.readFileSync(CONFIG_FILE))
   : { categoryId: null, logChannelId: null };
@@ -56,7 +56,7 @@ const saveConfig = () => fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, nu
 const saveCounter = () => fs.writeFileSync(COUNTER_FILE, JSON.stringify({ counter }, null, 2));
 const saveTickets = () => fs.writeFileSync(TICKETS_FILE, JSON.stringify(tickets, null, 2));
 
-/* ================= HELPERS ================= */
+/* HELPERS */
 const isAdmin = (m) => m.permissions.has(PermissionsBitField.Flags.Administrator);
 const isStaffOrAdmin = (i) =>
   i.member.roles.cache.has(STAFF_ROLE_ID) || isAdmin(i.member);
@@ -84,7 +84,7 @@ async function sendTranscriptToUser(userId, file) {
   } catch {}
 }
 
-/* ================= TRANSCRIPT ================= */
+/*  TRANSCRIPT */
 async function createTranscript(channel, data, closedBy) {
   const msgs = await channel.messages.fetch({ limit: 100 });
   const ordered = [...msgs.values()].reverse();
@@ -115,17 +115,17 @@ Time       : ${new Date().toLocaleString()}
   };
 }
 
-/* ================= WEB ================= */
+/*  WEB  */
 const app = express();
 app.get("/", (_, r) => r.send("ZerithMC Ticket Bot Online"));
 app.listen(3000);
 
-/* ================= CLIENT ================= */
+/*  CLIENT  */
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
 });
 
-/* ================= SLASH COMMANDS ================= */
+/*  SLASH COMMANDS  */
 const commands = [
   new SlashCommandBuilder()
     .setName("setup")
@@ -139,7 +139,7 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
 ];
 
-/* ================= READY ================= */
+/* READY  */
 client.once("ready", async () => {
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
   await rest.put(Routes.applicationCommands(client.user.id), {
@@ -148,10 +148,10 @@ client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
-/* ================= INTERACTIONS ================= */
+/*  INTERACTIONS */
 client.on("interactionCreate", async interaction => {
 
-  /* ---------- SLASH ---------- */
+  /* SLASH */
   if (interaction.isChatInputCommand()) {
     if (!isAdmin(interaction.member))
       return safeReply(interaction, { content: "❌ Admin only.", ephemeral: true });
@@ -195,7 +195,7 @@ Select a category below to open a ticket.
     }
   }
 
-  /* ---------- CREATE TICKET ---------- */
+  /*  CREATE TICKET  */
   if (interaction.isButton() && CATEGORIES[interaction.customId]) {
     const ch = await interaction.guild.channels.create({
       name: `ticket-${counter}`,
@@ -250,7 +250,7 @@ Select a category below to open a ticket.
     });
   }
 
-  /* ---------- CLAIM ---------- */
+  /* CLAIM  */
   if (interaction.isButton() && interaction.customId === "claim") {
     const data = tickets[interaction.channel.id];
     if (!data) return safeReply(interaction, { content: "❌ Ticket data missing.", ephemeral: true });
@@ -286,7 +286,7 @@ Select a category below to open a ticket.
     return safeReply(interaction, { content: "✅ Ticket claimed.", ephemeral: true });
   }
 
-  /* ---------- CLOSE ---------- */
+  /*  CLOSE */
   if (interaction.isButton() && interaction.customId === "close") {
     const data = tickets[interaction.channel.id];
     if (!data) return;
@@ -326,7 +326,7 @@ Select a category below to open a ticket.
     });
   }
 
-  /* ---------- TRANSCRIPT ---------- */
+  /* TRANSCRIPT */
   if (interaction.isButton() && interaction.customId === "transcript") {
     if (!isStaffOrAdmin(interaction)) return;
     const data = tickets[interaction.channel.id];
@@ -336,11 +336,11 @@ Select a category below to open a ticket.
   }
 
   
-/* ---------- REOPEN ---------- */
+/* REOPEN  */
 if (interaction.isButton() && interaction.customId === "reopen") {
   if (!isStaffOrAdmin(interaction)) return;
 
-  await interaction.deferUpdate(); // prevents "interaction failed"
+  await interaction.deferUpdate(); 
 
   const data = tickets[interaction.channel.id];
   if (!data) return;
@@ -349,7 +349,7 @@ if (interaction.isButton() && interaction.customId === "reopen") {
   data.claimedBy = null;
   saveTickets();
 
-  // 🔧 FIX CHANNEL NAME PROPERLY
+  
   let name = interaction.channel.name;
 
   if (name.startsWith("closed-claimed-")) {
@@ -360,7 +360,7 @@ if (interaction.isButton() && interaction.customId === "reopen") {
 
   await interaction.channel.setName(name);
 
-  // 🔓 REOPEN MESSAGE + ONLY CLOSE BUTTON
+ 
   await interaction.channel.send({
     content: `<@${data.opener}> <@&${STAFF_ROLE_ID}>`,
     embeds: [
@@ -388,7 +388,7 @@ if (interaction.isButton() && interaction.customId === "reopen") {
 
 
 
-  /* ---------- DELETE ---------- */
+  /* DELETE */
   if (interaction.isButton() && interaction.customId === "delete") {
     if (!isStaffOrAdmin(interaction)) return;
 
@@ -401,12 +401,13 @@ if (interaction.isButton() && interaction.customId === "reopen") {
   }
 });
 
-/* ================= SAFETY ================= */
+/* SAFETY */
 process.on("unhandledRejection", console.error);
 process.on("uncaughtException", console.error);
 
-/* ================= LOGIN ================= */
+/* LOGIN */
 client.login(process.env.TOKEN);
+
 
 
 
